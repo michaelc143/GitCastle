@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -11,10 +12,15 @@ import (
 	"time"
 
 	"github.com/michaelc143/gitcastle/internal/auth"
+	"github.com/michaelc143/gitcastle/internal/automation"
+	"github.com/michaelc143/gitcastle/internal/ci"
 	"github.com/michaelc143/gitcastle/internal/collab"
+	"github.com/michaelc143/gitcastle/internal/secrets"
+	"github.com/michaelc143/gitcastle/internal/webhooks"
 	"github.com/michaelc143/gitcastle/internal/config"
 	"github.com/michaelc143/gitcastle/internal/database"
 	"github.com/michaelc143/gitcastle/internal/gitserve"
+	"github.com/michaelc143/gitcastle/internal/mergesvc"
 	"github.com/michaelc143/gitcastle/internal/httpapi"
 	"github.com/michaelc143/gitcastle/internal/repos"
 )
@@ -44,10 +50,52 @@ func main() {
 	authStore := &auth.Store{Pool: pool}
 	permissions := &auth.Permissions{Pool: pool}
 	collabStore := &collab.Store{Pool: pool}
+
+	webhookStore := &webhooks.Store{Pool: pool}
+	webhookDispatcher := &webhooks.Dispatcher{Store: webhookStore, Logger: logger}
+	ciStore := &ci.Store{Pool: pool}
+	ciRunner := &ci.Runner{
+		Image:    os.Getenv("CI_RUNNER_IMAGE"),
+		WorkRoot: cfg.RepositoryRoot + "/.ci-work",
+	}
+	ciExecutor := &ci.Executor{
+		Store:  ciStore,
+		Runner: ciRunner,
+		Logger: logger,
+		RepoPath: func(ctx context.Context, repositoryID int64) (string, error) {
+			var path string
+			err := pool.QueryRow(ctx, `SELECT path FROM repositories WHERE id = $1`, repositoryID).Scan(&path)
+			return path, err
+		},
+	}
+	automationConfig := &automation.Config{
+		WebhookStore: webhookStore,
+		Dispatcher:   webhookDispatcher,
+		CIStore:      ciStore,
+		Executor:     ciExecutor,
+		Logger:       logger,
+		RepoPath:     ciExecutor.RepoPath,
+	}
+	var secretKey []byte
+	if envKey := os.Getenv("SECRET_ENCRYPTION_KEY"); len(envKey) == 64 {
+		decoded, err := hex.DecodeString(envKey)
+		if err == nil && len(decoded) == 32 {
+			secretKey = decoded
+		}
+	}
+	secretStore, secretErr := secrets.NewStore(pool, secretKey)
+	if secretErr != nil {
+		logger.Warn("secrets disabled", "reason", secretErr.Error())
+		secretStore = nil
+	}
 	repositoryService := repos.Service{
 		Store:          repos.PostgresStore{Pool: pool},
 		RepositoryRoot: cfg.RepositoryRoot,
 		Git:            repos.CommandGitInitializer{},
+	}
+	mergeService := &mergesvc.Service{
+		Root:   cfg.RepositoryRoot,
+		Events: nil, // events flow through automationConfig on merge completion
 	}
 	gitBackend := &gitserve.Handler{Root: cfg.RepositoryRoot, Prefix: "/git"}
 	gitHandler := gitserve.AuthHandler{
@@ -87,8 +135,18 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.Handle("/git/", gitHandler)
-	mux.Handle("/", httpapi.NewHandler(repositoryService, authStore, permissions, logger,
-		httpapi.Options{Collab: collabStore}))
+	automationAdapter := automationAdapter{config: automationConfig}
+	httpOptions := httpapi.Options{
+		Collab:     collabStore,
+		Merger:     mergeService,
+		Automation: automationAdapter,
+		Webhooks:   webhookStore,
+		Jobs:       ciStore,
+	}
+	if secretStore != nil {
+		httpOptions.Secrets = secretStore
+	}
+	mux.Handle("/", httpapi.NewHandler(repositoryService, authStore, permissions, logger, httpOptions))
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,
 		Handler:           mux,
@@ -118,4 +176,21 @@ func main() {
 			os.Exit(1)
 		}
 	}
+}
+
+
+// automationAdapter converts httpapi merge events into automation events.
+type automationAdapter struct{ config *automation.Config }
+
+func (a automationAdapter) PullRequestMerged(event httpapi.MergeEvent) {
+	a.config.PullRequestMerged(automation.MergeEvent{
+		RepositoryID: event.RepositoryID,
+		Owner:        event.Owner,
+		Name:         event.Name,
+		Number:       event.Number,
+		Actor:        event.Actor,
+		MergeCommit:  event.MergeCommit,
+		SourceBranch: event.SourceBranch,
+		TargetBranch: event.TargetBranch,
+	})
 }

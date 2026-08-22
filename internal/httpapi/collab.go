@@ -32,6 +32,29 @@ type Collaboration interface {
 	EvaluateMerge(ctx context.Context, repositoryID, prNumber int64) (collab.MergeCheck, error)
 }
 
+// Merger performs the real git merge behind POST .../merge.
+type Merger interface {
+	MergePR(ctx context.Context, owner, name string, pullNumber int64,
+		sourceBranch, targetBranch, mergedBy string) (string, error)
+}
+
+// MergeEvent is delivered to Automation after a successful merge.
+type MergeEvent struct {
+	RepositoryID int64
+	Owner        string
+	Name         string
+	Number       int64
+	Actor        string
+	MergeCommit  string
+	SourceBranch string
+	TargetBranch string
+}
+
+// Automation reacts to merge events (webhooks + CI).
+type Automation interface {
+	PullRequestMerged(event MergeEvent)
+}
+
 // registerCollabRoutes mounts the collaboration API. All routes require an
 // authenticated user.
 func (h Handler) registerCollabRoutes(mux *http.ServeMux) {
@@ -303,10 +326,46 @@ func (h Handler) mergePullRequestRoute(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	pr, err := h.Collab.SetPullRequestState(r.Context(), repository.ID, number, "merged", "")
+	user, _ := UserFrom(r.Context())
+
+	// Perform the real git merge when a Merger is configured; otherwise
+	// record the state transition only (test mode).
+	mergeCommit := ""
+	if h.Merger != nil {
+		pr, err := h.Collab.GetPullRequest(r.Context(), repository.ID, number)
+		if err != nil {
+			h.writeError(w, err)
+			return
+		}
+		hash, err := h.Merger.MergePR(r.Context(), repository.Owner, repository.Name,
+			number, pr.SourceBranch, pr.TargetBranch, user.Username)
+		if err != nil {
+			writeJSON(w, http.StatusConflict, map[string]string{
+				"error": "git merge failed: " + err.Error(),
+			})
+			return
+		}
+		mergeCommit = hash
+	}
+
+	pr, err := h.Collab.SetPullRequestState(r.Context(), repository.ID, number, "merged", mergeCommit)
 	if err != nil {
 		h.writeError(w, err)
 		return
+	}
+
+	// Notify automation subscribers about the merge.
+	if h.Automation != nil {
+		go h.Automation.PullRequestMerged(MergeEvent{
+			RepositoryID: repository.ID,
+			Owner:        repository.Owner,
+			Name:         repository.Name,
+			Number:       number,
+			Actor:        user.Username,
+			MergeCommit:  mergeCommit,
+			SourceBranch: pr.SourceBranch,
+			TargetBranch: pr.TargetBranch,
+		})
 	}
 	writeJSON(w, http.StatusOK, pr)
 }

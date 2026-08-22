@@ -68,7 +68,17 @@ func (s *Store) CreateHook(ctx context.Context, repositoryID int64, url, secret 
 	return hook, nil
 }
 
+// ListAllHooks returns every active hook for the repository regardless of
+// event type.
+func (s *Store) ListAllHooks(ctx context.Context, repositoryID int64) ([]Hook, error) {
+	return s.listHooksQuery(ctx, repositoryID, "")
+}
+
 func (s *Store) ListHooks(ctx context.Context, repositoryID int64, eventType string) ([]Hook, error) {
+	return s.listHooksQuery(ctx, repositoryID, eventType)
+}
+
+func (s *Store) listHooksQuery(ctx context.Context, repositoryID int64, eventType string) ([]Hook, error) {
 	query := `SELECT id, url, secret, events FROM webhooks WHERE repository_id = $1 AND active`
 	args := []any{repositoryID}
 	if eventType != "" {

@@ -31,13 +31,23 @@ type Handler struct {
 	Permissions  PermissionGranter
 	Content      ContentService
 	Collab       Collaboration
+	Merger       Merger
+	Automation   Automation
+	Webhooks     WebhookManager
+	Jobs         JobStore
+	Secrets      SecretManager
 	Logger       *slog.Logger
 }
 
 // Options carries the optional services; zero values fall back to defaults.
 type Options struct {
-	Content ContentService // defaults to DiskContent over repositoryService
-	Collab  Collaboration  // nil disables the collaboration routes
+	Content    ContentService // defaults to DiskContent over repositoryService
+	Collab     Collaboration  // nil disables the collaboration routes
+	Merger     Merger         // nil makes merges state-only (no git operation)
+	Automation Automation     // nil disables event fan-out after merges
+	Webhooks   WebhookManager // nil disables webhook management routes
+	Jobs       JobStore       // nil disables job listing routes
+	Secrets    SecretManager  // nil disables secret management routes
 }
 
 func NewHandler(repositoryService RepositoryService, authenticator Authenticator, permissions PermissionGranter, logger *slog.Logger, opts Options) http.Handler {
@@ -54,6 +64,11 @@ func NewHandler(repositoryService RepositoryService, authenticator Authenticator
 		Permissions:  permissions,
 		Content:      contentService,
 		Collab:       opts.Collab,
+		Merger:       opts.Merger,
+		Automation:   opts.Automation,
+		Webhooks:     opts.Webhooks,
+		Jobs:         opts.Jobs,
+		Secrets:      opts.Secrets,
 		Logger:       logger,
 	}
 	mux := http.NewServeMux()
@@ -68,6 +83,9 @@ func NewHandler(repositoryService RepositoryService, authenticator Authenticator
 	h.registerContentRoutes(mux)
 	if h.Collab != nil {
 		h.registerCollabRoutes(mux)
+	}
+	if h.Webhooks != nil {
+		h.registerAutomationRoutes(mux)
 	}
 	return loggingMiddleware(mux, logger)
 }
