@@ -1,0 +1,60 @@
+name: Backend
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: gitcastle
+          POSTGRES_PASSWORD: gitcastle
+          POSTGRES_DB: gitcastle
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U gitcastle -d gitcastle"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache: true
+      - name: Run unit tests
+        run: go test ./...
+      - name: Run PostgreSQL integration tests
+        env:
+          GITCASTLE_INTEGRATION: '1'
+          DATABASE_URL: postgres://gitcastle:gitcastle@localhost:5432/gitcastle?sslmode=disable
+        run: go test ./... -run Integration -count=1
+      - name: Build container
+        run: docker build -t gitcastle:${{ github.sha }} .
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+      - run: pnpm build
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:e2e
