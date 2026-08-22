@@ -4,10 +4,12 @@ GitCastle is a Git hosting platform built from scratch.
 
 ## Current milestone
 
-Phase 1 (local repository service) is complete: user accounts with bcrypt-hashed
-passwords and cookie sessions, bare Git repositories on disk backed by
-PostgreSQL metadata, per-user repository permissions, and Git smart-HTTP push
-and clone served at `/git/{owner}/{repo}.git`.
+Phase 2 (web interface) is complete on top of Phase 1: a hash-routed React
+app with login/registration, repository list, file browser with branch/tag
+switching, commit history, and a colorized diff viewer. Backend reads are
+served by new authenticated content endpoints (`/refs`, `/tree/{rev}`,
+`/blob/{rev}`, `/commits/{rev}`, `/commit/{hash}`) backed by the `gitdata`
+package, which reads the bare repositories through git plumbing commands.
 
 ### Requirements
 
@@ -92,7 +94,7 @@ The integration test uses the local PostgreSQL container and is skipped by the d
 2. ✅ React/TypeScript/Vite frontend
 3. ✅ Backend/frontend unit, integration, and end-to-end test harnesses
 4. ✅ CI workflow, Docker images, Compose stack, and Kubernetes starter manifests
-5. Web interface: login page, repo list, file browser, commit history, diff viewer
+5. ✅ Web interface: login page, repo list, file browser, commit history, diff viewer
 6. Collaboration: issues, pull requests, comments, reviews, branch protection
 7. Automation: webhooks, build jobs, isolated Docker runners, deployment secrets
 8. Production hardening: HTTPS, rate limiting, audit logs, backups, object storage, scanning
