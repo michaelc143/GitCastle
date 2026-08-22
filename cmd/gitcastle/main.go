@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/michaelc143/gitcastle/internal/auth"
+	"github.com/michaelc143/gitcastle/internal/collab"
 	"github.com/michaelc143/gitcastle/internal/config"
 	"github.com/michaelc143/gitcastle/internal/database"
 	"github.com/michaelc143/gitcastle/internal/gitserve"
@@ -42,6 +43,7 @@ func main() {
 
 	authStore := &auth.Store{Pool: pool}
 	permissions := &auth.Permissions{Pool: pool}
+	collabStore := &collab.Store{Pool: pool}
 	repositoryService := repos.Service{
 		Store:          repos.PostgresStore{Pool: pool},
 		RepositoryRoot: cfg.RepositoryRoot,
@@ -85,7 +87,8 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.Handle("/git/", gitHandler)
-	mux.Handle("/", httpapi.NewHandler(repositoryService, authStore, permissions, logger))
+	mux.Handle("/", httpapi.NewHandler(repositoryService, authStore, permissions, logger,
+		httpapi.Options{Collab: collabStore}))
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,
 		Handler:           mux,

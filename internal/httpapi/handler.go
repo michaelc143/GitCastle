@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/michaelc143/gitcastle/internal/auth"
+	"github.com/michaelc143/gitcastle/internal/collab"
 	"github.com/michaelc143/gitcastle/internal/gitdata"
 	"github.com/michaelc143/gitcastle/internal/repos"
 )
@@ -29,22 +30,30 @@ type Handler struct {
 	Auth         Authenticator
 	Permissions  PermissionGranter
 	Content      ContentService
+	Collab       Collaboration
 	Logger       *slog.Logger
 }
 
-func NewHandler(repositoryService RepositoryService, authenticator Authenticator, permissions PermissionGranter, logger *slog.Logger, content ...ContentService) http.Handler {
+// Options carries the optional services; zero values fall back to defaults.
+type Options struct {
+	Content ContentService // defaults to DiskContent over repositoryService
+	Collab  Collaboration  // nil disables the collaboration routes
+}
+
+func NewHandler(repositoryService RepositoryService, authenticator Authenticator, permissions PermissionGranter, logger *slog.Logger, opts Options) http.Handler {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	contentService := ContentService(DiskContent{Repositories: repositoryService})
-	if len(content) > 0 && content[0] != nil {
-		contentService = content[0]
+	contentService := opts.Content
+	if contentService == nil {
+		contentService = DiskContent{Repositories: repositoryService}
 	}
 	h := Handler{
 		Repositories: repositoryService,
 		Auth:         authenticator,
 		Permissions:  permissions,
 		Content:      contentService,
+		Collab:       opts.Collab,
 		Logger:       logger,
 	}
 	mux := http.NewServeMux()
@@ -57,6 +66,9 @@ func NewHandler(repositoryService RepositoryService, authenticator Authenticator
 	mux.HandleFunc("POST /api/v1/repositories", h.requireUser(h.createRepository))
 	mux.HandleFunc("GET /api/v1/repositories/{owner}/{name}", h.requireUser(h.getRepository))
 	h.registerContentRoutes(mux)
+	if h.Collab != nil {
+		h.registerCollabRoutes(mux)
+	}
 	return loggingMiddleware(mux, logger)
 }
 
@@ -119,6 +131,18 @@ func (h Handler) writeError(w http.ResponseWriter, err error) {
 	case errors.Is(err, gitdata.ErrNotFound):
 		status = http.StatusNotFound
 		message = "revision or path not found"
+	case errors.Is(err, collab.ErrNotFound):
+		status = http.StatusNotFound
+		message = "not found"
+	case errors.Is(err, collab.ErrInvalidState):
+		status = http.StatusBadRequest
+		message = err.Error()
+	case errors.Is(err, collab.ErrNotMergeable), errors.Is(err, collab.ErrReviewRequired):
+		status = http.StatusUnprocessableEntity
+		message = err.Error()
+	case errors.Is(err, collab.ErrProtected):
+		status = http.StatusForbidden
+		message = "branch is protected"
 	case errors.Is(err, auth.ErrUserExists):
 		status = http.StatusConflict
 		message = "user already exists"

@@ -35,7 +35,7 @@ func newContentHandlerWithRepo(t *testing.T) (http.Handler, *fakePermissions) {
 	content := &fakeContent{repo: newContentTestRepo(t)}
 	permissions := &fakePermissions{}
 	authenticator := &fakeAuthenticator{sessionToken: "test-token"}
-	handler := NewHandler(&fakeRepositoryService{}, authenticator, permissions, discardLogger(), content)
+	handler := NewHandler(&fakeRepositoryService{}, authenticator, permissions, discardLogger(), Options{Content: content})
 	return handler, permissions
 }
 

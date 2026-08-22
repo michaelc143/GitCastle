@@ -83,7 +83,7 @@ func newTestHandler(service *fakeRepositoryService, authenticator Authenticator)
 	if authenticator == nil {
 		authenticator = &fakeAuthenticator{sessionToken: "test-token"}
 	}
-	return NewHandler(service, authenticator, &fakePermissions{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	return NewHandler(service, authenticator, &fakePermissions{}, slog.New(slog.NewTextHandler(io.Discard, nil)), Options{})
 }
 
 
@@ -179,7 +179,7 @@ func TestServiceFailureMapsToInternalServerError(t *testing.T) {
 func TestRepositoriesRequireAuthentication(t *testing.T) {
 	authenticator := &fakeAuthenticator{sessionToken: ""}
 	service := &fakeRepositoryService{}
-	handler := NewHandler(service, authenticator, &fakePermissions{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	handler := NewHandler(service, authenticator, &fakePermissions{}, slog.New(slog.NewTextHandler(io.Discard, nil)), Options{})
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/repositories", nil)
 
@@ -239,7 +239,7 @@ func TestCreateRepositoryGrantsAdminToCreator(t *testing.T) {
 	service := &fakeRepositoryService{}
 	permissions := &fakePermissions{}
 	authenticator := &fakeAuthenticator{sessionToken: "test-token"}
-	handler := NewHandler(service, authenticator, permissions, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	handler := NewHandler(service, authenticator, permissions, slog.New(slog.NewTextHandler(io.Discard, nil)), Options{})
 	recorder := httptest.NewRecorder()
 	request := authenticatedRequest(http.MethodPost, "/api/v1/repositories", strings.NewReader(`{"name":"castle"}`))
 
