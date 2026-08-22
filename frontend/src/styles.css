@@ -38,3 +38,39 @@ button:disabled { cursor: progress; opacity: 0.65; }
 h3 { font-size: 1.05rem; margin-bottom: 0; }
 .repository-card code { color: #8fa1b8; font-size: 0.75rem; margin-left: auto; max-width: 42%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 700px) { .shell { padding-top: 40px; } .hero { align-items: flex-start; } .castle-mark { font-size: 3.5rem; } .create-form { grid-template-columns: 1fr; } .repository-card { align-items: flex-start; flex-wrap: wrap; } .repository-card code { margin-left: 58px; max-width: calc(100% - 58px); } }
+
+/* --- topbar, cards, and shared bits (Phase 2) --- */
+.topbar { align-items: center; background: rgba(13, 19, 33, 0.92); border-bottom: 1px solid #2c4565; display: flex; justify-content: space-between; padding: 14px clamp(20px, 4vw, 48px); position: sticky; top: 0; z-index: 5; backdrop-filter: blur(8px); }
+.brand { color: #e8edf4; font-family: Georgia, serif; font-size: 1.25rem; font-weight: 700; letter-spacing: -0.03em; text-decoration: none; }
+.brand span { color: #f6c453; }
+.card { background: rgba(21, 32, 52, 0.88); border: 1px solid #2c4565; border-radius: 18px; box-shadow: 0 18px 60px rgba(0, 0, 0, 0.22); margin-bottom: 28px; padding: clamp(20px, 4vw, 36px); }
+.shell-narrow { width: min(480px, calc(100% - 40px)); }
+.stack { display: grid; gap: 16px; }
+.muted { color: #8fa1b8; }
+.link { background: none; border: 0; border-radius: 0; color: #7dd3fc; cursor: pointer; font-weight: 600; padding: 0; text-decoration: underline; }
+.link:hover:not(:disabled) { background: none; transform: none; }
+a { color: #7dd3fc; }
+
+/* --- repository page --- */
+.repo-header h1 { font-size: clamp(1.8rem, 5vw, 2.6rem); margin-bottom: 12px; }
+.ref-bar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.ref-chip { background: #182943; border: 1px solid #2c4565; border-radius: 99px; color: #cbd8ea; font-size: 0.82rem; padding: 5px 13px; text-decoration: none; }
+.ref-chip.active { border-color: #f6c453; color: #f6c453; }
+.repo-tabs { border-bottom: 1px solid #2c4565; display: flex; gap: 4px; margin-bottom: 20px; }
+.tab { border-radius: 10px 10px 0 0; color: #aab7ca; padding: 10px 18px; text-decoration: none; }
+.tab.active { background: #182943; color: #e8edf4; font-weight: 700; }
+.breadcrumbs { color: #8fa1b8; margin-bottom: 14px; }
+.tree-table { background: #142238; border: 1px solid #2c4565; border-radius: 12px; width: 100%; }
+.tree-table td { padding: 10px 16px; }
+.type-cell { width: 34px; }
+.blob-view, .commit-body { background: #101b2d; border: 1px solid #2c4565; border-radius: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.85rem; line-height: 1.55; overflow-x: auto; padding: 18px; white-space: pre-wrap; }
+.commit-list { list-style: none; margin: 0; padding: 0; }
+.commit-row { background: #142238; border: 1px solid #2c4565; border-radius: 12px; margin-bottom: 10px; padding: 14px 18px; }
+.commit-row { display: flex; flex-wrap: wrap; gap: 6px 18px; justify-content: space-between; }
+.commit-message { color: #e8edf4; font-weight: 700; text-decoration: none; }
+.diff-view { background: #0a1120; border: 1px solid #2c4565; border-radius: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.82rem; line-height: 1.5; overflow-x: auto; padding: 14px 0; }
+.diff-line { padding: 0 16px; white-space: pre; }
+.diff-add { background: rgba(74, 222, 128, 0.13); color: #9ff5b5; }
+.diff-del { background: rgba(248, 113, 113, 0.13); color: #ffb3b3; }
+.diff-hunk { background: rgba(125, 211, 252, 0.09); color: #7dd3fc; }
+.diff-meta { color: #66798f; }

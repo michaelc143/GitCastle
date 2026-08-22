@@ -9,3 +9,5 @@ dist/
 .gocache/
 .gomodcache/
 .gopath/
+.local-bin/
+.corepack/
