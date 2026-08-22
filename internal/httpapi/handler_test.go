@@ -9,9 +9,65 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/michaelc143/gitcastle/internal/auth"
 	"github.com/michaelc143/gitcastle/internal/repos"
 )
+
+type fakeAuthenticator struct {
+	users        map[string]string // username -> password
+	sessionToken string
+	err          error
+}
+
+func (f *fakeAuthenticator) CreateUser(_ context.Context, username, password string) (auth.User, error) {
+	if f.err != nil {
+		return auth.User{}, f.err
+	}
+	if f.users == nil {
+		f.users = map[string]string{}
+	}
+	if _, exists := f.users[username]; exists {
+		return auth.User{}, auth.ErrUserExists
+	}
+	f.users[username] = password
+	return auth.User{ID: 1, Username: username, CreatedAt: time.Now()}, nil
+}
+
+func (f *fakeAuthenticator) Authenticate(_ context.Context, username, password string) (auth.User, error) {
+	if stored, ok := f.users[username]; ok && stored == password {
+		return auth.User{ID: 1, Username: username}, nil
+	}
+	return auth.User{}, auth.ErrBadCredentials
+}
+
+func (f *fakeAuthenticator) StartSession(context.Context, int64) (string, time.Time, error) {
+	return f.sessionToken, time.Now().Add(time.Hour), nil
+}
+
+func (f *fakeAuthenticator) UserForToken(_ context.Context, token string) (auth.User, error) {
+	if token == f.sessionToken {
+		return auth.User{ID: 1, Username: "alice"}, nil
+	}
+	return auth.User{}, auth.ErrNoSession
+}
+
+func (f *fakeAuthenticator) EndSession(context.Context, string) error { return nil }
+
+func newTestHandler(service *fakeRepositoryService, authenticator Authenticator) http.Handler {
+	if authenticator == nil {
+		authenticator = &fakeAuthenticator{sessionToken: "test-token"}
+	}
+	return NewHandler(service, authenticator, slog.New(slog.NewTextHandler(io.Discard, nil)))
+}
+
+
+func authenticatedRequest(method, target string, body io.Reader) *http.Request {
+	request := httptest.NewRequest(method, target, body)
+	request.AddCookie(&http.Cookie{Name: SessionCookieName, Value: "test-token"})
+	return request
+}
 
 type fakeRepositoryService struct {
 	created repos.Repository
@@ -44,9 +100,9 @@ func (s *fakeRepositoryService) List(context.Context) ([]repos.Repository, error
 
 func TestCreateRepository(t *testing.T) {
 	service := &fakeRepositoryService{}
-	handler := NewHandler(service, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	handler := newTestHandler(service, nil)
 	recorder := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodPost, "/api/v1/repositories", strings.NewReader(`{"owner":"alice","name":"castle"}`))
+	request := authenticatedRequest(http.MethodPost, "/api/v1/repositories", strings.NewReader(`{"owner":"alice","name":"castle"}`))
 
 	handler.ServeHTTP(recorder, request)
 
@@ -59,9 +115,9 @@ func TestCreateRepository(t *testing.T) {
 }
 
 func TestCreateRepositoryRejectsMalformedJSON(t *testing.T) {
-	handler := NewHandler(&fakeRepositoryService{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	handler := newTestHandler(&fakeRepositoryService{}, nil)
 	recorder := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodPost, "/api/v1/repositories", strings.NewReader(`{"owner":`))
+	request := authenticatedRequest(http.MethodPost, "/api/v1/repositories", strings.NewReader(`{"owner":`))
 
 	handler.ServeHTTP(recorder, request)
 
@@ -72,9 +128,9 @@ func TestCreateRepositoryRejectsMalformedJSON(t *testing.T) {
 
 func TestGetRepositoryMapsNotFound(t *testing.T) {
 	service := &fakeRepositoryService{err: repos.ErrNotFound}
-	handler := NewHandler(service, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	handler := newTestHandler(service, nil)
 	recorder := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/repositories/alice/missing", nil)
+	request := authenticatedRequest(http.MethodGet, "/api/v1/repositories/alice/missing", nil)
 
 	handler.ServeHTTP(recorder, request)
 
@@ -85,13 +141,72 @@ func TestGetRepositoryMapsNotFound(t *testing.T) {
 
 func TestServiceFailureMapsToInternalServerError(t *testing.T) {
 	service := &fakeRepositoryService{err: errors.New("unexpected failure")}
-	handler := NewHandler(service, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	handler := newTestHandler(service, nil)
+	recorder := httptest.NewRecorder()
+	request := authenticatedRequest(http.MethodGet, "/api/v1/repositories", nil)
+
+	handler.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestRepositoriesRequireAuthentication(t *testing.T) {
+	authenticator := &fakeAuthenticator{sessionToken: ""}
+	service := &fakeRepositoryService{}
+	handler := NewHandler(service, authenticator, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/repositories", nil)
 
 	handler.ServeHTTP(recorder, request)
 
-	if recorder.Code != http.StatusInternalServerError {
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestRegisterAndLoginFlow(t *testing.T) {
+	authenticator := &fakeAuthenticator{sessionToken: "session-123"}
+	handler := newTestHandler(&fakeRepositoryService{}, authenticator)
+
+	// Register
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/api/v1/register", strings.NewReader(`{"username":"alice","password":"correct horse"}`)))
+	if recorder.Code != http.StatusCreated {
+		t.Fatalf("register status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+
+	// Login sets the session cookie
+	recorder = httptest.NewRecorder()
+	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/api/v1/login", strings.NewReader(`{"username":"alice","password":"correct horse"}`)))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("login status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	cookies := recorder.Result().Cookies()
+	if len(cookies) == 0 || cookies[0].Value != "session-123" {
+		t.Fatalf("expected session cookie, got %+v", cookies)
+	}
+
+	// /me with that cookie
+	recorder = httptest.NewRecorder()
+	meRequest := httptest.NewRequest(http.MethodGet, "/api/v1/me", nil)
+	meRequest.AddCookie(cookies[0])
+	handler.ServeHTTP(recorder, meRequest)
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"alice"`) {
+		t.Fatalf("me status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestLoginRejectsBadCredentials(t *testing.T) {
+	authenticator := &fakeAuthenticator{users: map[string]string{"alice": "correct horse"}}
+	handler := newTestHandler(&fakeRepositoryService{}, authenticator)
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/login", strings.NewReader(`{"username":"alice","password":"wrong"}`))
+
+	handler.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
 	}
 }

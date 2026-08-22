@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/michaelc143/gitcastle/internal/auth"
 	"github.com/michaelc143/gitcastle/internal/repos"
 )
 
@@ -19,19 +20,24 @@ type RepositoryService interface {
 
 type Handler struct {
 	Repositories RepositoryService
+	Auth         Authenticator
 	Logger       *slog.Logger
 }
 
-func NewHandler(repositoryService RepositoryService, logger *slog.Logger) http.Handler {
+func NewHandler(repositoryService RepositoryService, authenticator Authenticator, logger *slog.Logger) http.Handler {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	h := Handler{Repositories: repositoryService, Logger: logger}
+	h := Handler{Repositories: repositoryService, Auth: authenticator, Logger: logger}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", h.health)
-	mux.HandleFunc("GET /api/v1/repositories", h.listRepositories)
-	mux.HandleFunc("POST /api/v1/repositories", h.createRepository)
-	mux.HandleFunc("GET /api/v1/repositories/{owner}/{name}", h.getRepository)
+	mux.HandleFunc("POST /api/v1/register", h.register)
+	mux.HandleFunc("POST /api/v1/login", h.login)
+	mux.HandleFunc("POST /api/v1/logout", h.logout)
+	mux.HandleFunc("GET /api/v1/me", h.requireUser(h.me))
+	mux.HandleFunc("GET /api/v1/repositories", h.requireUser(h.listRepositories))
+	mux.HandleFunc("POST /api/v1/repositories", h.requireUser(h.createRepository))
+	mux.HandleFunc("GET /api/v1/repositories/{owner}/{name}", h.requireUser(h.getRepository))
 	return loggingMiddleware(mux, logger)
 }
 
@@ -49,12 +55,13 @@ func (h Handler) listRepositories(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h Handler) createRepository(w http.ResponseWriter, r *http.Request) {
+	user, _ := UserFrom(r.Context())
 	var input repos.CreateInput
-	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&input); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+	if !h.decodeJSON(w, r, &input) {
 		return
+	}
+	if input.Owner == "" {
+		input.Owner = user.Username
 	}
 	repository, err := h.Repositories.Create(r.Context(), input)
 	if err != nil {
@@ -83,6 +90,21 @@ func (h Handler) writeError(w http.ResponseWriter, err error) {
 	case errors.Is(err, repos.ErrNotFound):
 		status = http.StatusNotFound
 		message = "repository not found"
+	case errors.Is(err, auth.ErrUserExists):
+		status = http.StatusConflict
+		message = "user already exists"
+	case errors.Is(err, auth.ErrInvalidUsername):
+		status = http.StatusBadRequest
+		message = "invalid username: use 1-40 letters, numbers, dashes, or underscores"
+	case errors.Is(err, auth.ErrWeakPassword):
+		status = http.StatusBadRequest
+		message = err.Error()
+	case errors.Is(err, auth.ErrBadCredentials):
+		status = http.StatusUnauthorized
+		message = "invalid username or password"
+	case errors.Is(err, auth.ErrNoSession):
+		status = http.StatusUnauthorized
+		message = "authentication required"
 	case strings.HasPrefix(err.Error(), "invalid "):
 		status = http.StatusBadRequest
 		message = err.Error()
@@ -95,6 +117,18 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(value)
+}
+
+// decodeJSON parses a bounded JSON body into target, replying with a 400 on
+// malformed input.
+func (h Handler) decodeJSON(w http.ResponseWriter, r *http.Request, target any) bool {
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(target); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		return false
+	}
+	return true
 }
 
 func loggingMiddleware(next http.Handler, logger *slog.Logger) http.Handler {

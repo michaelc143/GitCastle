@@ -10,8 +10,10 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/michaelc143/gitcastle/internal/auth"
 	"github.com/michaelc143/gitcastle/internal/config"
 	"github.com/michaelc143/gitcastle/internal/database"
+	"github.com/michaelc143/gitcastle/internal/gitserve"
 	"github.com/michaelc143/gitcastle/internal/httpapi"
 	"github.com/michaelc143/gitcastle/internal/repos"
 )
@@ -38,14 +40,20 @@ func main() {
 		os.Exit(1)
 	}
 
+	authStore := &auth.Store{Pool: pool}
 	repositoryService := repos.Service{
 		Store:          repos.PostgresStore{Pool: pool},
 		RepositoryRoot: cfg.RepositoryRoot,
 		Git:            repos.CommandGitInitializer{},
 	}
+	gitHandler := &gitserve.Handler{Root: cfg.RepositoryRoot, Prefix: "/git"}
+
+	mux := http.NewServeMux()
+	mux.Handle("/git/", gitHandler)
+	mux.Handle("/", httpapi.NewHandler(repositoryService, authStore, logger))
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           httpapi.NewHandler(repositoryService, logger),
+		Handler:           mux,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      15 * time.Second,
