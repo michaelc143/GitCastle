@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/michaelc143/gitcastle/internal/auth"
+	"github.com/michaelc143/gitcastle/internal/gitdata"
 	"github.com/michaelc143/gitcastle/internal/repos"
 )
 
@@ -27,14 +28,25 @@ type Handler struct {
 	Repositories RepositoryService
 	Auth         Authenticator
 	Permissions  PermissionGranter
+	Content      ContentService
 	Logger       *slog.Logger
 }
 
-func NewHandler(repositoryService RepositoryService, authenticator Authenticator, permissions PermissionGranter, logger *slog.Logger) http.Handler {
+func NewHandler(repositoryService RepositoryService, authenticator Authenticator, permissions PermissionGranter, logger *slog.Logger, content ...ContentService) http.Handler {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	h := Handler{Repositories: repositoryService, Auth: authenticator, Permissions: permissions, Logger: logger}
+	contentService := ContentService(DiskContent{Repositories: repositoryService})
+	if len(content) > 0 && content[0] != nil {
+		contentService = content[0]
+	}
+	h := Handler{
+		Repositories: repositoryService,
+		Auth:         authenticator,
+		Permissions:  permissions,
+		Content:      contentService,
+		Logger:       logger,
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", h.health)
 	mux.HandleFunc("POST /api/v1/register", h.register)
@@ -44,6 +56,7 @@ func NewHandler(repositoryService RepositoryService, authenticator Authenticator
 	mux.HandleFunc("GET /api/v1/repositories", h.requireUser(h.listRepositories))
 	mux.HandleFunc("POST /api/v1/repositories", h.requireUser(h.createRepository))
 	mux.HandleFunc("GET /api/v1/repositories/{owner}/{name}", h.requireUser(h.getRepository))
+	h.registerContentRoutes(mux)
 	return loggingMiddleware(mux, logger)
 }
 
@@ -103,6 +116,9 @@ func (h Handler) writeError(w http.ResponseWriter, err error) {
 	case errors.Is(err, repos.ErrNotFound):
 		status = http.StatusNotFound
 		message = "repository not found"
+	case errors.Is(err, gitdata.ErrNotFound):
+		status = http.StatusNotFound
+		message = "revision or path not found"
 	case errors.Is(err, auth.ErrUserExists):
 		status = http.StatusConflict
 		message = "user already exists"
