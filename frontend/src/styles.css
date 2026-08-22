@@ -74,3 +74,18 @@ a { color: #7dd3fc; }
 .diff-del { background: rgba(248, 113, 113, 0.13); color: #ffb3b3; }
 .diff-hunk { background: rgba(125, 211, 252, 0.09); color: #7dd3fc; }
 .diff-meta { color: #66798f; }
+
+/* --- collaboration (Phase 3) --- */
+.issue-list { list-style: none; margin: 16px 0 0; padding: 0; }
+.state-pill { border-radius: 99px; font-size: 0.72rem; font-weight: 800; padding: 3px 10px; text-transform: uppercase; }
+.state-pill.open { background: rgba(74, 222, 128, 0.14); color: #7ef0a2; }
+.state-pill.closed { background: rgba(148, 163, 184, 0.16); color: #aab7ca; }
+.state-pill.merged { background: rgba(125, 211, 252, 0.16); color: #7dd3fc; }
+.toggle { align-items: center; display: flex; gap: 8px; }
+textarea { background: #101b2d; border: 1px solid #385573; border-radius: 10px; color: #e8edf4; font: inherit; padding: 12px 14px; resize: vertical; }
+select { background: #101b2d; border: 1px solid #385573; border-radius: 10px; color: #e8edf4; padding: 12px 14px; }
+.branch-pair { display: flex; gap: 12px; }
+.review-list { list-style: none; margin: 0 0 16px; padding: 0; }
+.review-list li { margin-bottom: 8px; }
+.review-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.comment-list { list-style: none; margin: 0; padding: 0; }

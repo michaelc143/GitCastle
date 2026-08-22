@@ -7,7 +7,7 @@ import { useEffect, useState } from 'react'
 export type Route =
   | { page: 'home' }
   | { page: 'login' }
-  | { page: 'repo'; owner: string; name: string; tab: 'code' | 'commits'; rev: string; filePath: string; commitHash?: string }
+  | { page: 'repo'; owner: string; name: string; tab: 'code' | 'commits' | 'issues' | 'pulls'; rev: string; filePath: string; commitHash?: string; subjectNumber?: number }
 
 function parse(hash: string): Route {
   const clean = hash.replace(/^#\/?/, '')
@@ -16,15 +16,20 @@ function parse(hash: string): Route {
   if (parts.length >= 2) {
     const [owner, name, third, fourth, ...rest] = parts
     const filePath = rest.join('/')
+    if (third === 'issues') {
+      return { page: 'repo', owner, name, tab: 'issues', rev: 'HEAD', filePath: '', subjectNumber: fourth ? Number(fourth) : undefined }
+    }
+    if (third === 'pulls') {
+      return { page: 'repo', owner, name, tab: 'pulls', rev: 'HEAD', filePath: '', subjectNumber: fourth ? Number(fourth) : undefined }
+    }
     if (third === 'commits') {
       return { page: 'repo', owner, name, tab: 'commits', rev: fourth ?? 'HEAD', filePath: '' }
     }
     if (third === 'commit' && fourth) {
       return { page: 'repo', owner, name, tab: 'commits', rev: 'HEAD', filePath: '', commitHash: fourth }
     }
-    // code tab: #/o/n/tree/{rev}/{...path} or #/o/n/blob/{rev}/{...path}
-    const kind = (third === 'blob' ? 'blob' : 'tree') as 'tree' | 'blob'
-    return { page: 'repo', owner, name, tab: 'code', rev: fourth ?? 'HEAD', filePath, ...(kind === 'blob' ? {} : {}) }
+    // code tab: #/o/n/tree/{rev}/{...path}
+    return { page: 'repo', owner, name, tab: 'code', rev: fourth ?? 'HEAD', filePath }
   }
   return { page: 'home' }
 }

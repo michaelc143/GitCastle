@@ -139,3 +139,133 @@ export async function listCommits(owner: string, name: string, rev: string): Pro
 export async function getCommit(owner: string, name: string, hash: string): Promise<{ commit: Commit; patch: string }> {
   return request(repoPath(owner, name, `/commit/${encodeURIComponent(hash)}`))
 }
+
+// --- collaboration (Phase 3) ---
+
+export type Issue = {
+  number: number
+  title: string
+  body: string
+  author: string
+  state: 'open' | 'closed'
+  created_at: string
+  updated_at: string
+}
+
+export type Comment = {
+  id: number
+  author: string
+  body: string
+  created_at: string
+}
+
+export type PullRequest = {
+  number: number
+  title: string
+  body: string
+  author: string
+  state: 'open' | 'merged' | 'closed'
+  source_branch: string
+  target_branch: string
+  merge_commit?: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type MergeCheck = {
+  mergable: boolean
+  blockers: string[]
+  required_approvals: number
+  current_approvals: number
+}
+
+export type Review = {
+  reviewer: string
+  verdict: 'approved' | 'changes_requested' | 'commented'
+  body: string
+  created_at: string
+}
+
+export type BranchProtection = {
+  branch: string
+  required_approvals: number
+  allow_force_push: boolean
+}
+
+export async function listIssues(owner: string, name: string, state = ''): Promise<Issue[]> {
+  const query = state ? `?state=${state}` : ''
+  const response = await request<{ issues: Issue[] }>(repoPath(owner, name, `/issues${query}`))
+  return response.issues
+}
+
+export function createIssue(owner: string, name: string, title: string, body: string): Promise<Issue> {
+  return request(repoPath(owner, name, '/issues'), {
+    method: 'POST',
+    body: JSON.stringify({ title, body }),
+  })
+}
+
+export function getIssue(owner: string, name: string, number: number): Promise<Issue> {
+  return request(repoPath(owner, name, `/issues/${number}`))
+}
+
+export function setIssueState(owner: string, name: string, number: number, state: string): Promise<Issue> {
+  return request(repoPath(owner, name, `/issues/${number}`), {
+    method: 'PATCH',
+    body: JSON.stringify({ state }),
+  })
+}
+
+export async function listComments(owner: string, name: string, subject: 'issues' | 'pulls', number: number): Promise<Comment[]> {
+  const response = await request<{ comments: Comment[] }>(repoPath(owner, name, `/${subject}/${number}/comments`))
+  return response.comments
+}
+
+export function addComment(owner: string, name: string, subject: 'issues' | 'pulls', number: number, body: string): Promise<Comment> {
+  return request(repoPath(owner, name, `/${subject}/${number}/comments`), {
+    method: 'POST',
+    body: JSON.stringify({ body }),
+  })
+}
+
+export async function listPullRequests(owner: string, name: string, state = ''): Promise<PullRequest[]> {
+  const query = state ? `?state=${state}` : ''
+  const response = await request<{ pull_requests: PullRequest[] }>(repoPath(owner, name, `/pulls${query}`))
+  return response.pull_requests
+}
+
+export function createPullRequest(owner: string, name: string, input: {
+  title: string; body: string; source_branch: string; target_branch: string
+}): Promise<PullRequest> {
+  return request(repoPath(owner, name, '/pulls'), {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}
+
+export async function getPullRequest(owner: string, name: string, number: number): Promise<{ pull_request: PullRequest; merge_check: MergeCheck }> {
+  return request(repoPath(owner, name, `/pulls/${number}`))
+}
+
+export function mergePullRequest(owner: string, name: string, number: number): Promise<PullRequest> {
+  return request(repoPath(owner, name, `/pulls/${number}/merge`), { method: 'POST' })
+}
+
+export function putReview(owner: string, name: string, number: number, verdict: string, body: string): Promise<Review> {
+  return request(repoPath(owner, name, `/pulls/${number}/review`), {
+    method: 'PUT',
+    body: JSON.stringify({ verdict, body }),
+  })
+}
+
+export async function listReviews(owner: string, name: string, number: number): Promise<Review[]> {
+  const response = await request<{ reviews: Review[] }>(repoPath(owner, name, `/pulls/${number}/reviews`))
+  return response.reviews
+}
+
+export function setBranchProtection(owner: string, name: string, branch: string, requiredApprovals: number): Promise<BranchProtection> {
+  return request(repoPath(owner, name, `/branches/${encodeURIComponent(branch)}/protection`), {
+    method: 'PUT',
+    body: JSON.stringify({ required_approvals: requiredApprovals }),
+  })
+}

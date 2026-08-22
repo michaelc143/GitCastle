@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react'
 import { logout, me, User } from './api'
 import HomePage from './HomePage'
 import LoginPage from './LoginPage'
+import { IssuesList, IssueDetail } from './IssuesPage'
+import { PullRequestsList, PullRequestDetail } from './PullsPage'
 import { CodeBrowser, CommitDetail, CommitHistory } from './RepoPage'
-import { navigate, useRoute } from './router'
+import { navigate, Route, useRoute } from './router'
 import './styles.css'
 
 export default function App() {
@@ -53,32 +55,62 @@ export default function App() {
               navigate('/')
             }} onGoHome={() => navigate('/')} />
       )}
-      {route.page === 'repo' && route.tab === 'code' && (
-        <RepoShell title={`${route.owner}/${route.name}`}>
-          <CodeBrowser owner={route.owner} name={route.name} rev={route.rev} filePath={route.filePath} />
-        </RepoShell>
-      )}
-      {route.page === 'repo' && route.tab === 'commits' && !route.commitHash && (
-        <RepoShell title={`${route.owner}/${route.name}`}>
-          <CommitHistory owner={route.owner} name={route.name} rev={route.rev} />
-        </RepoShell>
-      )}
-      {route.page === 'repo' && route.commitHash && (
-        <RepoShell title={`${route.owner}/${route.name}`}>
-          <CommitDetail owner={route.owner} name={route.name} hash={route.commitHash} />
+      {route.page === 'repo' && (
+        <RepoShell title={`${route.owner}/${route.name}`} route={route}>
+          {route.tab === 'code' && (
+            <CodeBrowser owner={route.owner} name={route.name} rev={route.rev} filePath={route.filePath} />
+          )}
+          {route.tab === 'commits' && !route.commitHash && (
+            <CommitHistory owner={route.owner} name={route.name} rev={route.rev} />
+          )}
+          {route.commitHash && (
+            <CommitDetail owner={route.owner} name={route.name} hash={route.commitHash} />
+          )}
+          {route.tab === 'issues' && route.subjectNumber === undefined && (
+            <IssuesList owner={route.owner} name={route.name} signedIn={user !== null} />
+          )}
+          {route.tab === 'issues' && route.subjectNumber !== undefined && (
+            <IssueDetail owner={route.owner} name={route.name} number={route.subjectNumber} signedIn={user !== null} />
+          )}
+          {route.tab === 'pulls' && route.subjectNumber === undefined && (
+            <PullRequestsList owner={route.owner} name={route.name} signedIn={user !== null} />
+          )}
+          {route.tab === 'pulls' && route.subjectNumber !== undefined && (
+            <PullRequestDetail owner={route.owner} name={route.name} number={route.subjectNumber} signedIn={user !== null} />
+          )}
         </RepoShell>
       )}
     </>
   )
 }
 
-function RepoShell({ title, children }: { title: string; children: React.ReactNode }) {
+function RepoShell({ title, route, children }: { title: string; route: Route; children: React.ReactNode }) {
   return (
     <main className="shell">
       <header className="repo-header">
         <h1>{title}</h1>
       </header>
+      {route.page === 'repo' && <RepoTabs route={route} />}
       {children}
     </main>
+  )
+}
+
+function RepoTabs({ route }: { route: Extract<Route, { page: 'repo' }> }) {
+  const base = `#/${route.owner}/${route.name}`
+  const tabs: Array<[typeof route.tab, string]> = [
+    ['code', 'Code'],
+    ['commits', 'Commits'],
+    ['issues', 'Issues'],
+    ['pulls', 'Pull requests'],
+  ]
+  return (
+    <nav className="repo-tabs" aria-label="Repository views">
+      {tabs.map(([tab, label]) => (
+        <a key={tab} className={`tab${route.tab === tab ? ' active' : ''}`} href={`${base}/${tab === 'code' ? 'tree/HEAD' : tab}`}>
+          {label}
+        </a>
+      ))}
+    </nav>
   )
 }
