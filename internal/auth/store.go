@@ -152,6 +152,23 @@ func (s *Store) UserForToken(ctx context.Context, token string) (User, error) {
 	return user, nil
 }
 
+// UserForID looks up a user by primary key.
+func (s *Store) UserForID(ctx context.Context, userID int64) (User, error) {
+	var user User
+	err := s.Pool.QueryRow(ctx, `
+		SELECT id, username, created_at
+		FROM users
+		WHERE id = $1
+	`, userID).Scan(&user.ID, &user.Username, &user.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return User{}, ErrNoSession
+	}
+	if err != nil {
+		return User{}, fmt.Errorf("lookup user by id: %w", err)
+	}
+	return user, nil
+}
+
 // EndSession deletes the session row for a logout.
 func (s *Store) EndSession(ctx context.Context, token string) error {
 	_, err := s.Pool.Exec(ctx, `DELETE FROM sessions WHERE token_hash = $1`, sha256Sum(token))

@@ -26,9 +26,14 @@ type CommandGitInitializer struct{}
 
 func (CommandGitInitializer) InitBare(ctx context.Context, path string) error {
 	command := exec.CommandContext(ctx, "git", "init", "--bare", "--initial-branch=main", path)
-	command.Env = append(os.Environ(), "GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=http.receivepack", "GIT_CONFIG_VALUE_0=true")
 	if output, err := command.CombinedOutput(); err != nil {
 		return fmt.Errorf("initialize bare repository: %w: %s", err, output)
+	}
+	// Allow pushes over the smart HTTP transport; bare repos reject
+	// receive-pack by default.
+	config := exec.CommandContext(ctx, "git", "-C", path, "config", "http.receivepack", "true")
+	if output, err := config.CombinedOutput(); err != nil {
+		return fmt.Errorf("enable http.receivepack: %w: %s", err, output)
 	}
 	return nil
 }

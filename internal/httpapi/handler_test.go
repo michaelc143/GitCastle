@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -55,11 +56,34 @@ func (f *fakeAuthenticator) UserForToken(_ context.Context, token string) (auth.
 
 func (f *fakeAuthenticator) EndSession(context.Context, string) error { return nil }
 
+type fakePermissions struct {
+	grants map[string]string // "repoID:username" -> role
+	err    error
+}
+
+func (f *fakePermissions) Grant(_ context.Context, repositoryID int64, username, role string) error {
+	if f.err != nil {
+		return f.err
+	}
+	if f.grants == nil {
+		f.grants = map[string]string{}
+	}
+	f.grants[fmt.Sprintf("%d:%s", repositoryID, username)] = role
+	return nil
+}
+
+func (f *fakePermissions) RoleFor(_ context.Context, repositoryID int64, username string) (string, error) {
+	if role, ok := f.grants[fmt.Sprintf("%d:%s", repositoryID, username)]; ok {
+		return role, nil
+	}
+	return "", auth.ErrNotFound
+}
+
 func newTestHandler(service *fakeRepositoryService, authenticator Authenticator) http.Handler {
 	if authenticator == nil {
 		authenticator = &fakeAuthenticator{sessionToken: "test-token"}
 	}
-	return NewHandler(service, authenticator, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	return NewHandler(service, authenticator, &fakePermissions{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
 }
 
 
@@ -80,7 +104,7 @@ func (s *fakeRepositoryService) Create(_ context.Context, input repos.CreateInpu
 	if s.err != nil {
 		return repos.Repository{}, s.err
 	}
-	s.created = repos.Repository{Owner: input.Owner, Name: input.Name, Path: "/tmp/" + input.Name + ".git"}
+	s.created = repos.Repository{ID: 1, Owner: input.Owner, Name: input.Name, Path: "/tmp/" + input.Name + ".git"}
 	return s.created, nil
 }
 
@@ -155,7 +179,7 @@ func TestServiceFailureMapsToInternalServerError(t *testing.T) {
 func TestRepositoriesRequireAuthentication(t *testing.T) {
 	authenticator := &fakeAuthenticator{sessionToken: ""}
 	service := &fakeRepositoryService{}
-	handler := NewHandler(service, authenticator, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	handler := NewHandler(service, authenticator, &fakePermissions{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/repositories", nil)
 
@@ -208,5 +232,23 @@ func TestLoginRejectsBadCredentials(t *testing.T) {
 
 	if recorder.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestCreateRepositoryGrantsAdminToCreator(t *testing.T) {
+	service := &fakeRepositoryService{}
+	permissions := &fakePermissions{}
+	authenticator := &fakeAuthenticator{sessionToken: "test-token"}
+	handler := NewHandler(service, authenticator, permissions, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	recorder := httptest.NewRecorder()
+	request := authenticatedRequest(http.MethodPost, "/api/v1/repositories", strings.NewReader(`{"name":"castle"}`))
+
+	handler.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusCreated {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	if role := permissions.grants["1:alice"]; role != auth.RoleAdmin {
+		t.Fatalf("creator role = %q, want %q", role, auth.RoleAdmin)
 	}
 }

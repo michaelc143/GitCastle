@@ -18,17 +18,23 @@ type RepositoryService interface {
 	List(ctx context.Context) ([]repos.Repository, error)
 }
 
+type PermissionGranter interface {
+	Grant(ctx context.Context, repositoryID int64, username, role string) error
+	RoleFor(ctx context.Context, repositoryID int64, username string) (string, error)
+}
+
 type Handler struct {
 	Repositories RepositoryService
 	Auth         Authenticator
+	Permissions  PermissionGranter
 	Logger       *slog.Logger
 }
 
-func NewHandler(repositoryService RepositoryService, authenticator Authenticator, logger *slog.Logger) http.Handler {
+func NewHandler(repositoryService RepositoryService, authenticator Authenticator, permissions PermissionGranter, logger *slog.Logger) http.Handler {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	h := Handler{Repositories: repositoryService, Auth: authenticator, Logger: logger}
+	h := Handler{Repositories: repositoryService, Auth: authenticator, Permissions: permissions, Logger: logger}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", h.health)
 	mux.HandleFunc("POST /api/v1/register", h.register)
@@ -67,6 +73,13 @@ func (h Handler) createRepository(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		h.writeError(w, err)
 		return
+	}
+	// The creator becomes the repository admin.
+	if h.Permissions != nil {
+		if err := h.Permissions.Grant(r.Context(), repository.ID, user.Username, auth.RoleAdmin); err != nil {
+			h.writeError(w, err)
+			return
+		}
 	}
 	writeJSON(w, http.StatusCreated, repository)
 }

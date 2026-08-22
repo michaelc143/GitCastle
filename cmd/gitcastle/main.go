@@ -41,16 +41,51 @@ func main() {
 	}
 
 	authStore := &auth.Store{Pool: pool}
+	permissions := &auth.Permissions{Pool: pool}
 	repositoryService := repos.Service{
 		Store:          repos.PostgresStore{Pool: pool},
 		RepositoryRoot: cfg.RepositoryRoot,
 		Git:            repos.CommandGitInitializer{},
 	}
-	gitHandler := &gitserve.Handler{Root: cfg.RepositoryRoot, Prefix: "/git"}
+	gitBackend := &gitserve.Handler{Root: cfg.RepositoryRoot, Prefix: "/git"}
+	gitHandler := gitserve.AuthHandler{
+		Backend: gitBackend,
+		Auth: gitserve.BridgeAuthorizer{
+			AuthenticateFunc: func(ctx context.Context, username, password string) (int64, error) {
+				user, err := authStore.Authenticate(ctx, username, password)
+				if err != nil {
+					return 0, err
+				}
+				return user.ID, nil
+			},
+			CheckAccessFunc: func(ctx context.Context, userID int64, owner, repo string, access gitserve.Access) error {
+				repository, err := repositoryService.Get(ctx, owner, repo)
+				if err != nil {
+					return err
+				}
+				user, err := authStore.UserForID(ctx, userID)
+				if err != nil {
+					return err
+				}
+				role, err := permissions.RoleFor(ctx, repository.ID, user.Username)
+				if err != nil {
+					return err
+				}
+				required := auth.RoleRead
+				if access == gitserve.AccessWrite {
+					required = auth.RoleWrite
+				}
+				if !auth.HasAtLeast(role, required) {
+					return gitserve.ErrAccessDenied
+				}
+				return nil
+			},
+		},
+	}
 
 	mux := http.NewServeMux()
 	mux.Handle("/git/", gitHandler)
-	mux.Handle("/", httpapi.NewHandler(repositoryService, authStore, logger))
+	mux.Handle("/", httpapi.NewHandler(repositoryService, authStore, permissions, logger))
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,
 		Handler:           mux,
