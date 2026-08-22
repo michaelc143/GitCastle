@@ -60,14 +60,13 @@ export function CodeBrowser({ owner, name, rev, filePath }: Props & { rev: strin
     <div>
       <RefBar owner={owner} name={name} state={refState} activeRev={activeRev} />
       <Breadcrumbs owner={owner} name={name} rev={activeRev} filePath={filePath} />
-      <RepoTabs owner={owner} name={name} rev={activeRev} active="code" />
       {error && <p className="error" role="alert">{error}</p>}
       {!error && filePath === '' && entries && (
         <table className="tree-table">
           <tbody>
             {entries.map((entry) => (
               <tr key={`${entry.type}/${entry.path}`}>
-                <td className="type-cell" aria-hidden="true">{entry.type === 'tree' ? '📁' : '📄'}</td>
+                <td className={`type-cell type-${entry.type}`} aria-hidden="true">{entry.type === 'tree' ? 'DIR' : 'FILE'}</td>
                 <td>
                   <a href={`#/${owner}/${name}/tree/${activeRev}${filePath ? `/${filePath}` : ''}/${entry.path}`}>
                     {entry.path}
@@ -108,7 +107,6 @@ export function CommitHistory({ owner, name, rev }: Props & { rev: string }) {
   return (
     <div>
       <RefBar owner={owner} name={name} state={refState} activeRev={activeRev} />
-      <RepoTabs owner={owner} name={name} rev={activeRev} active="commits" />
       {loading && <p className="empty-state">Loading history…</p>}
       {error && <p className="error" role="alert">{error}</p>}
       <ul className="commit-list">
@@ -191,7 +189,7 @@ function RefBar({ owner, name, state, activeRev }: Props & { state: RevState | n
           className={`ref-chip${ref.name === activeRev ? ' active' : ''}`}
           href={`#/${owner}/${name}/tree/${encodeURIComponent(ref.name)}`}
         >
-          {ref.is_tag ? '🏷 ' : '⑂ '}{ref.name}
+          <span className="ref-symbol" aria-hidden="true">{ref.is_tag ? 'TAG' : 'BR'}</span>{ref.name}
         </a>
       ))}
     </nav>
@@ -218,25 +216,6 @@ function Breadcrumbs({ owner, name, rev, filePath }: Props & { rev: string; file
           </span>
         )
       })}
-    </nav>
-  )
-}
-
-function RepoTabs({ owner, name, rev, active }: Props & { rev: string; active: 'code' | 'commits' }) {
-  return (
-    <nav className="repo-tabs" aria-label="Repository views">
-      <a
-        className={`tab${active === 'code' ? ' active' : ''}`}
-        href={`#/${owner}/${name}/tree/${encodeURIComponent(rev)}`}
-      >
-        Code
-      </a>
-      <a
-        className={`tab${active === 'commits' ? ' active' : ''}`}
-        href={`#/${owner}/${name}/commits/${encodeURIComponent(rev)}`}
-      >
-        Commits
-      </a>
     </nav>
   )
 }

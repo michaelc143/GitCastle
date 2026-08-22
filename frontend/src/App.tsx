@@ -33,8 +33,9 @@ export default function App() {
   return (
     <>
       <nav className="topbar">
-        <a className="brand" href="#/">Git<span>Castle</span></a>
-        <div>
+        <div className="topbar-inner">
+          <a className="brand" href="#/"><span className="brand-mark">G</span><span className="brand-name">GitCastle</span></a>
+          <div className="topbar-user">
           {user ? (
             <>
               <span className="muted">{user.username}</span>{' '}
@@ -43,6 +44,7 @@ export default function App() {
           ) : (
             <button type="button" className="link" onClick={() => navigate('/login')}>Sign in</button>
           )}
+          </div>
         </div>
       </nav>
 
@@ -86,9 +88,14 @@ export default function App() {
 
 function RepoShell({ title, route, children }: { title: string; route: Route; children: React.ReactNode }) {
   return (
-    <main className="shell">
-      <header className="repo-header">
-        <h1>{title}</h1>
+    <main className="shell shell-repo">
+      <header className="repo-header page-intro">
+        <div>
+          <p className="eyebrow">Repository</p>
+          <h1>{title}</h1>
+          <p className="page-subtitle">Source, history, and collaboration in one place.</p>
+        </div>
+        <span className="context-chip">Local forge</span>
       </header>
       {route.page === 'repo' && <RepoTabs route={route} />}
       {children}

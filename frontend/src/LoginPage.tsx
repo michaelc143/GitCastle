@@ -34,17 +34,34 @@ export default function LoginPage({ onAuthenticated, onGoHome }: Props) {
   }
 
   return (
-    <main className="shell shell-narrow">
-      <header className="hero">
+    <main className="shell shell-narrow auth-shell">
+      <header className="auth-intro page-intro">
         <div>
-          <p className="eyebrow">A self-hosted forge</p>
-          <h1>Git<span>Castle</span></h1>
+          <p className="eyebrow">Account</p>
+          <h1>{mode === 'login' ? 'Welcome back' : 'Create an account'}</h1>
+          <p className="page-subtitle">Access your repositories and collaborate from your own forge.</p>
         </div>
-        <div className="castle-mark" aria-hidden="true">♜</div>
       </header>
 
-      <section className="card" aria-label={mode === 'login' ? 'Sign in' : 'Create account'}>
-        <h2>{mode === 'login' ? 'Sign in' : 'Create your account'}</h2>
+      <section className="card auth-card" aria-label={mode === 'login' ? 'Sign in' : 'Create account'}>
+        <div className="auth-mode" aria-label="Account action">
+          <button
+            type="button"
+            className={`mode-option${mode === 'login' ? ' active' : ''}`}
+            aria-pressed={mode === 'login'}
+            onClick={() => { setMode('login'); setError('') }}
+          >
+            Sign in
+          </button>
+          <button
+            type="button"
+            className={`mode-option${mode === 'register' ? ' active' : ''}`}
+            aria-pressed={mode === 'register'}
+            onClick={() => { setMode('register'); setError('') }}
+          >
+            Create account
+          </button>
+        </div>
         <form onSubmit={handleSubmit} className="stack">
           <label>
             Username
@@ -72,21 +89,7 @@ export default function LoginPage({ onAuthenticated, onGoHome }: Props) {
             {busy ? 'Working…' : mode === 'login' ? 'Sign in' : 'Create account & sign in'}
           </button>
         </form>
-        <p className="muted">
-          {mode === 'login' ? (
-            <>New here?{' '}
-              <button type="button" className="link" onClick={() => { setMode('register'); setError('') }}>
-                Create an account
-              </button>
-            </>
-          ) : (
-            <>Already have an account?{' '}
-              <button type="button" className="link" onClick={() => { setMode('login'); setError('') }}>
-                Sign in
-              </button>
-            </>
-          )}
-          {' · '}
+        <p className="auth-footer muted">
           <button type="button" className="link" onClick={onGoHome}>Browse without signing in</button>
         </p>
       </section>

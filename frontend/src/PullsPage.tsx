@@ -50,9 +50,18 @@ export function PullRequestsList({ owner, name, signedIn }: Props) {
 
   return (
     <div>
-      <div className="section-heading"><h2>Pull requests</h2></div>
+      <div className="section-heading page-section-heading">
+        <div>
+          <p className="section-kicker">Review and ship</p>
+          <h2>Pull requests</h2>
+        </div>
+      </div>
       {signedIn && refs.length > 1 && (
-        <div className="card stack">
+        <div className="card stack composer-card">
+          <div>
+            <p className="section-kicker">New pull request</p>
+            <h3>Propose a change</h3>
+          </div>
           <input placeholder="Title" value={title} onChange={(event) => setTitle(event.target.value)} />
           <div className="branch-pair">
             <select value={source} onChange={(event) => setSource(event.target.value)} aria-label="Source branch">
@@ -72,10 +81,10 @@ export function PullRequestsList({ owner, name, signedIn }: Props) {
       {error && <p className="error" role="alert">{error}</p>}
       <ul className="issue-list">
         {pulls.map((pr) => (
-          <li key={pr.number} className="commit-row">
+          <li key={pr.number} className="commit-row issue-row">
             <span className={`state-pill ${pr.state}`}>{pr.state}</span>
-            <span>#{pr.number} <strong>{pr.title}</strong> <span className="muted">({pr.source_branch} → {pr.target_branch})</span></span>
-            <span className="muted">{pr.author}</span>
+            <span className="subject-cell"><span className="subject-number">#{pr.number}</span> <strong>{pr.title}</strong> <span className="muted branch-label">{pr.source_branch} → {pr.target_branch}</span></span>
+            <span className="muted row-meta">{pr.author}</span>
           </li>
         ))}
       </ul>
@@ -153,23 +162,23 @@ export function PullRequestDetail({ owner, name, number, signedIn }: Props & { n
         {pr.source_branch} → {pr.target_branch} · opened by {pr.author}
       </p>
 
-      <div className="card">
+      <div className="card readiness-card">
         <h3>Merge readiness</h3>
         {check.mergable ? (
           <>
-            <p>✅ All checks passed ({check.current_approvals}/{check.required_approvals} approvals).</p>
+            <p className="success-message"><span className="status-dot" aria-hidden="true" />All checks passed <span className="muted">({check.current_approvals}/{check.required_approvals} approvals)</span></p>
             {signedIn && pr.state === 'open' && (
               <button type="button" onClick={doMerge} disabled={busy}>Merge pull request</button>
             )}
           </>
         ) : (
-          <ul>
-            {check.blockers.map((blocker) => <li key={blocker}>⛔ {blocker}</li>)}
+            <ul className="blocker-list">
+            {check.blockers.map((blocker) => <li key={blocker}><span className="status-dot danger" aria-hidden="true" />{blocker}</li>)}
           </ul>
         )}
       </div>
 
-      <div className="card">
+      <div className="card review-card">
         <h3>Reviews</h3>
         <ul className="review-list">
           {reviews.map((entry) => (
@@ -187,10 +196,10 @@ export function PullRequestDetail({ owner, name, number, signedIn }: Props & { n
         )}
       </div>
 
-      <h3>Conversation</h3>
+      <h3 className="subsection-heading">Conversation</h3>
       <ul className="comment-list">
         {comments.map((comment) => (
-          <li key={comment.id} className="commit-row">
+          <li key={comment.id} className="commit-row comment-card">
             <strong>{comment.author}</strong>
             <p>{comment.body}</p>
           </li>

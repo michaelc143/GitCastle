@@ -38,15 +38,22 @@ export function IssuesList({ owner, name, signedIn }: Props) {
 
   return (
     <div>
-      <div className="section-heading">
-        <h2>Issues</h2>
+      <div className="section-heading page-section-heading">
+        <div>
+          <p className="section-kicker">Track work</p>
+          <h2>Issues</h2>
+        </div>
         <label className="toggle">
           <input type="checkbox" checked={showClosed} onChange={(event) => setShowClosed(event.target.checked)} />
-          show closed
+          <span>Show closed</span>
         </label>
       </div>
       {signedIn && (
-        <div className="card stack">
+        <div className="card stack composer-card">
+          <div>
+            <p className="section-kicker">New issue</p>
+            <h3>What needs attention?</h3>
+          </div>
           <input placeholder="Title" value={title} onChange={(event) => setTitle(event.target.value)} />
           <textarea placeholder="Details (optional)" value={body} onChange={(event) => setBody(event.target.value)} rows={3} />
           <button type="button" onClick={submit} disabled={!title.trim()}>New issue</button>
@@ -55,10 +62,10 @@ export function IssuesList({ owner, name, signedIn }: Props) {
       {error && <p className="error" role="alert">{error}</p>}
       <ul className="issue-list">
         {issues.map((issue) => (
-          <li key={issue.number} className="commit-row">
+          <li key={issue.number} className="commit-row issue-row">
             <span className={`state-pill ${issue.state}`}>{issue.state}</span>
-            <span>#{issue.number} <strong>{issue.title}</strong></span>
-            <span className="muted">{issue.author}</span>
+            <span className="subject-cell"><span className="subject-number">#{issue.number}</span> <strong>{issue.title}</strong></span>
+            <span className="muted row-meta">{issue.author}</span>
           </li>
         ))}
       </ul>
@@ -119,10 +126,10 @@ export function IssueDetail({ owner, name, number, signedIn }: Props & { number:
         )}
       </p>
       {issue.body && <pre className="blob-view">{issue.body}</pre>}
-      <h3>Comments</h3>
+      <h3 className="subsection-heading">Comments</h3>
       <ul className="comment-list">
         {comments.map((comment) => (
-          <li key={comment.id} className="commit-row">
+          <li key={comment.id} className="commit-row comment-card">
             <strong>{comment.author}</strong>
             <p>{comment.body}</p>
           </li>

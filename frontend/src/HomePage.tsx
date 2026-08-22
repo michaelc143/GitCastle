@@ -9,7 +9,6 @@ type Props = {
 
 export default function HomePage({ user, onRequireLogin }: Props) {
   const [repositories, setRepositories] = useState<Repository[]>([])
-  const [owner, setOwner] = useState('')
   const [name, setName] = useState('')
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
@@ -41,19 +40,27 @@ export default function HomePage({ user, onRequireLogin }: Props) {
   }
 
   return (
-    <main className="shell">
-      <header className="hero">
+    <main className="shell shell-dashboard">
+      <header className="page-intro home-intro">
         <div>
-          <p className="eyebrow">A self-hosted forge</p>
-          <h1>Git<span>Castle</span></h1>
-          <p className="subtitle">{user ? `Welcome back, ${user.username}.` : 'Your code. Your rules.'}</p>
+          <p className="eyebrow">Workspace</p>
+          <h1>Repositories</h1>
+          <p className="page-subtitle">
+            {user ? `Welcome back, ${user.username}.` : 'Browse public source and keep your code close.'}
+          </p>
         </div>
-        <div className="castle-mark" aria-hidden="true">♜</div>
+        <span className="context-chip">Self-hosted</span>
       </header>
 
       {user && (
-        <section className="card" aria-label="Create a repository">
-          <h2>New repository</h2>
+        <section className="card create-panel" aria-label="Create a repository">
+          <div className="panel-heading">
+            <div>
+              <p className="section-kicker">Start something new</p>
+              <h2>New repository</h2>
+            </div>
+            <span className="panel-index">01</span>
+          </div>
           <form className="create-form" onSubmit={handleSubmit}>
             <label>
               Owner
@@ -78,8 +85,11 @@ export default function HomePage({ user, onRequireLogin }: Props) {
 
       <section className="card" aria-label="Repositories">
         <div className="section-heading">
-          <h2>Repositories</h2>
-          <span className="count-badge">{repositories.length}</span>
+          <div>
+            <p className="section-kicker">Your codebase</p>
+            <h2>All repositories</h2>
+          </div>
+          <span className="count-badge"><span className="count-number">{repositories.length}</span> total</span>
         </div>
 
         {error && <p className="error" role="alert">{error}</p>}
@@ -100,11 +110,12 @@ export default function HomePage({ user, onRequireLogin }: Props) {
                 key={repository.id}
                 href={`#/${repository.owner}/${repository.name}`}
               >
-                <div className="repo-icon" aria-hidden="true">⌘</div>
+                <div className="repo-icon" aria-hidden="true">R</div>
                 <div>
                   <p className="repo-owner">{repository.owner}</p>
                   <h3>{repository.name}</h3>
                 </div>
+                <span className="row-arrow" aria-hidden="true">↗</span>
               </a>
             ))}
           </div>
