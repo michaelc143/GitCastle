@@ -24,7 +24,9 @@ type Config struct {
 	Executor   *ci.Executor
 	Logger     *slog.Logger
 	// RepoPath resolves a repository id to its bare path.
-	RepoPath func(ctx context.Context, repositoryID int64) (string, error)
+	RepoPath      func(ctx context.Context, repositoryID int64) (string, error)
+	InternalToken string
+	ServerURL     string
 }
 
 func (c *Config) log(message string, err error) {

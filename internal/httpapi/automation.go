@@ -31,6 +31,7 @@ type SecretManager interface {
 }
 
 func (h Handler) registerAutomationRoutes(mux *http.ServeMux) {
+	mux.HandleFunc("POST /api/v1/internal/notify-push", h.notifyPushRoute)
 	base := "/api/v1/repositories/{owner}/{name}"
 	mux.HandleFunc("GET "+base+"/webhooks", h.requireUser(h.listWebhooksRoute))
 	mux.HandleFunc("POST "+base+"/webhooks", h.requireUser(h.createWebhookRoute))
@@ -38,8 +39,8 @@ func (h Handler) registerAutomationRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET "+base+"/webhooks/deliveries", h.requireUser(h.listDeliveriesRoute))
 	mux.HandleFunc("GET "+base+"/jobs", h.requireUser(h.listJobsRoute))
 	mux.HandleFunc("GET "+base+"/secrets", h.requireUser(h.listSecretsRoute))
-	mux.HandleFunc("PUT "+base+"/secrets/{name}", h.requireUser(h.putSecretRoute))
-	mux.HandleFunc("DELETE "+base+"/secrets/{name}", h.requireUser(h.deleteSecretRoute))
+	mux.HandleFunc("PUT "+base+"/secrets/{secretName}", h.requireUser(h.putSecretRoute))
+	mux.HandleFunc("DELETE "+base+"/secrets/{secretName}", h.requireUser(h.deleteSecretRoute))
 }
 
 func parseID(r *http.Request) (int64, bool) {
@@ -145,7 +146,7 @@ func (h Handler) putSecretRoute(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	name := r.PathValue("name")
+	name := r.PathValue("secretName")
 	if name == "" {
 		badNumber(w)
 		return
@@ -168,9 +169,68 @@ func (h Handler) deleteSecretRoute(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if err := h.Secrets.Delete(r.Context(), repository.ID, r.PathValue("name")); err != nil {
+	if err := h.Secrets.Delete(r.Context(), repository.ID, r.PathValue("secretName")); err != nil {
 		h.writeError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
+
+// PushNotifier receives push notifications from repository post-receive hooks.
+type PushNotifier interface {
+	PushReceived(ctx context.Context, event PushEvent)
+}
+
+// hookPushPayload is the JSON body posted by post-receive hooks.
+type hookPushPayload struct {
+	Owner   string `json:"owner"`
+	Name    string `json:"name"`
+	Branch  string `json:"branch"`
+	OldHash string `json:"old_hash"`
+	NewHash string `json:"new_hash"`
+}
+
+// PushEvent is the enriched notification sent to PushNotifier.
+type PushEvent struct {
+	RepositoryID int64
+	Owner        string
+	Name         string
+	Branch       string
+	OldHash      string
+	NewHash      string
+}
+
+// notifyPushRoute accepts authenticated post-receive callbacks.
+func (h Handler) notifyPushRoute(w http.ResponseWriter, r *http.Request) {
+	if h.Pushes == nil || h.InternalToken == "" {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "push notifications disabled"})
+		return
+	}
+	if r.Header.Get("X-GitCastle-Internal-Token") != h.InternalToken {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid token"})
+		return
+	}
+	var input hookPushPayload
+	if !h.decodeJSON(w, r, &input) {
+		return
+	}
+	if input.Owner == "" || input.Name == "" || input.Branch == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "owner, name, branch required"})
+		return
+	}
+	repository, err := h.Repositories.Get(r.Context(), input.Owner, input.Name)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	h.Pushes.PushReceived(r.Context(), PushEvent{
+		RepositoryID: repository.ID,
+		Owner:        input.Owner,
+		Name:         input.Name,
+		Branch:       input.Branch,
+		OldHash:      input.OldHash,
+		NewHash:      input.NewHash,
+	})
+	writeJSON(w, http.StatusOK, map[string]string{"status": "notified"})
 }

@@ -5,6 +5,7 @@ package ci
 import (
 	"context"
 	"log/slog"
+	"strings"
 )
 
 // Executor processes queued jobs using a Runner.
@@ -31,7 +32,11 @@ func (e *Executor) RunOne(ctx context.Context, repositoryID, jobID int64, commit
 	if runErr != nil || result.ExitCode != 0 {
 		status = StatusFailed
 	}
-	if err := e.Store.MarkFinished(ctx, jobID, status, result.Output, result.ExitCode); err != nil {
+	output := result.Output
+	if runErr != nil && !strings.HasSuffix(output, "\"") && output == "" {
+		output = "runner error: " + runErr.Error()
+	}
+	if err := e.Store.MarkFinished(ctx, jobID, status, output, result.ExitCode); err != nil {
 		return err
 	}
 	return runErr

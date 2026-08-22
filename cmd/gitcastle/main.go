@@ -68,6 +68,10 @@ func main() {
 			return path, err
 		},
 	}
+	internalToken := os.Getenv("GITCASTLE_INTERNAL_TOKEN")
+	if internalToken == "" {
+		logger.Warn("push notifications disabled", "reason", "GITCASTLE_INTERNAL_TOKEN not set")
+	}
 	automationConfig := &automation.Config{
 		WebhookStore: webhookStore,
 		Dispatcher:   webhookDispatcher,
@@ -135,13 +139,14 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.Handle("/git/", gitHandler)
-	automationAdapter := automationAdapter{config: automationConfig}
 	httpOptions := httpapi.Options{
-		Collab:     collabStore,
-		Merger:     mergeService,
-		Automation: automationAdapter,
-		Webhooks:   webhookStore,
-		Jobs:       ciStore,
+		Collab:        collabStore,
+		Merger:        mergeService,
+		Automation:    automationAdapter{config: automationConfig},
+		Pushes:        automationAdapter{config: automationConfig},
+		InternalToken: internalToken,
+		Webhooks:      webhookStore,
+		Jobs:          ciStore,
 	}
 	if secretStore != nil {
 		httpOptions.Secrets = secretStore
@@ -181,6 +186,17 @@ func main() {
 
 // automationAdapter converts httpapi merge events into automation events.
 type automationAdapter struct{ config *automation.Config }
+
+func (a automationAdapter) PushReceived(ctx context.Context, event httpapi.PushEvent) {
+	a.config.PushReceived(ctx, automation.PushEvent{
+		RepositoryID: event.RepositoryID,
+		Owner:        event.Owner,
+		Name:         event.Name,
+		Branch:       event.Branch,
+		OldHash:      event.OldHash,
+		NewHash:      event.NewHash,
+	})
+}
 
 func (a automationAdapter) PullRequestMerged(event httpapi.MergeEvent) {
 	a.config.PullRequestMerged(automation.MergeEvent{

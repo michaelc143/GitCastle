@@ -36,6 +36,8 @@ type Handler struct {
 	Webhooks     WebhookManager
 	Jobs         JobStore
 	Secrets      SecretManager
+	Pushes       PushNotifier
+	InternalToken string
 	Logger       *slog.Logger
 }
 
@@ -48,6 +50,8 @@ type Options struct {
 	Webhooks   WebhookManager // nil disables webhook management routes
 	Jobs       JobStore       // nil disables job listing routes
 	Secrets    SecretManager  // nil disables secret management routes
+	Pushes     PushNotifier   // nil disables push notification intake
+	InternalToken string      // shared secret for post-receive hooks
 }
 
 func NewHandler(repositoryService RepositoryService, authenticator Authenticator, permissions PermissionGranter, logger *slog.Logger, opts Options) http.Handler {
@@ -69,6 +73,8 @@ func NewHandler(repositoryService RepositoryService, authenticator Authenticator
 		Webhooks:     opts.Webhooks,
 		Jobs:         opts.Jobs,
 		Secrets:      opts.Secrets,
+		Pushes:       opts.Pushes,
+		InternalToken: opts.InternalToken,
 		Logger:       logger,
 	}
 	mux := http.NewServeMux()

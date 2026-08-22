@@ -35,6 +35,10 @@ func (r *Runner) Run(ctx context.Context, barePath, commitHash, branch, command 
 	if r.WorkRoot == "" {
 		r.WorkRoot = os.TempDir()
 	}
+	// Ensure the work root exists; the server may not have created it.
+	if err := os.MkdirAll(r.WorkRoot, 0o700); err != nil {
+		return Result{}, fmt.Errorf("create work root: %w", err)
+	}
 	timeout := r.Timeout
 	if timeout <= 0 {
 		timeout = 10 * time.Minute
