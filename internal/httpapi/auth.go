@@ -114,8 +114,14 @@ func (h Handler) login(w http.ResponseWriter, r *http.Request) {
 	}
 	user, err := h.Auth.Authenticate(r.Context(), input.Username, input.Password)
 	if err != nil {
+		if h.Audit != nil {
+			_ = h.Audit.Record(r.Context(), input.Username, "login_failed", input.Username, nil, remoteIP(r))
+		}
 		h.writeError(w, err)
 		return
+	}
+	if h.Audit != nil {
+		_ = h.Audit.Record(r.Context(), user.Username, "login", user.Username, nil, remoteIP(r))
 	}
 	token, expires, err := h.Auth.StartSession(r.Context(), user.ID)
 	if err != nil {
@@ -127,6 +133,9 @@ func (h Handler) login(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h Handler) logout(w http.ResponseWriter, r *http.Request) {
+	if user, ok := UserFrom(r.Context()); ok && h.Audit != nil {
+		_ = h.Audit.Record(r.Context(), user.Username, "logout", user.Username, nil, remoteIP(r))
+	}
 	if cookie, err := r.Cookie(sessionCookie); err == nil && cookie.Value != "" {
 		if err := h.Auth.EndSession(r.Context(), cookie.Value); err != nil {
 			h.writeError(w, err)

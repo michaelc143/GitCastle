@@ -7,12 +7,15 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strings"
 	"os/signal"
 	"syscall"
 	"time"
 
+	"github.com/michaelc143/gitcastle/internal/audit"
 	"github.com/michaelc143/gitcastle/internal/auth"
 	"github.com/michaelc143/gitcastle/internal/automation"
+	"github.com/michaelc143/gitcastle/internal/backup"
 	"github.com/michaelc143/gitcastle/internal/ci"
 	"github.com/michaelc143/gitcastle/internal/collab"
 	"github.com/michaelc143/gitcastle/internal/secrets"
@@ -21,8 +24,10 @@ import (
 	"github.com/michaelc143/gitcastle/internal/database"
 	"github.com/michaelc143/gitcastle/internal/gitserve"
 	"github.com/michaelc143/gitcastle/internal/mergesvc"
+	"github.com/michaelc143/gitcastle/internal/middleware"
 	"github.com/michaelc143/gitcastle/internal/httpapi"
 	"github.com/michaelc143/gitcastle/internal/repos"
+	"github.com/michaelc143/gitcastle/internal/storage"
 )
 
 func main() {
@@ -80,6 +85,13 @@ func main() {
 		Logger:       logger,
 		RepoPath:     ciExecutor.RepoPath,
 	}
+	auditStore := &audit.Store{Pool: pool}
+	backupManager := &backup.Manager{
+		Root: cfg.RepositoryRoot,
+		Store: &storage.LocalStore{Root: cfg.RepositoryRoot + "/.backups"},
+	}
+	rateLimiter := middleware.NewRateLimiter(120, 2) // burst 120, sustained 2/s per IP
+
 	var secretKey []byte
 	if envKey := os.Getenv("SECRET_ENCRYPTION_KEY"); len(envKey) == 64 {
 		decoded, err := hex.DecodeString(envKey)
@@ -140,6 +152,9 @@ func main() {
 	mux := http.NewServeMux()
 	mux.Handle("/git/", gitHandler)
 	httpOptions := httpapi.Options{
+		Audit:      auditStore,
+		Profiles:   authStore,
+		Backups:    backupAdapter{manager: backupManager},
 		Collab:        collabStore,
 		Merger:        mergeService,
 		Automation:    automationAdapter{config: automationConfig},
@@ -151,7 +166,22 @@ func main() {
 	if secretStore != nil {
 		httpOptions.Secrets = secretStore
 	}
-	mux.Handle("/", httpapi.NewHandler(repositoryService, authStore, permissions, logger, httpOptions))
+	apiHandler := httpapi.NewHandler(repositoryService, authStore, permissions, logger, httpOptions)
+	hardened := middleware.Chain(
+		http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/git/" || strings.HasPrefix(r.URL.Path, "/git/") {
+				gitHandler.ServeHTTP(w, r)
+				return
+			}
+			apiHandler.ServeHTTP(w, r)
+		})),
+		middleware.SecureHeaders,
+		middleware.RequestID,
+		middleware.Recovery(logger),
+		middleware.AccessLog(logger),
+		rateLimiter.Middleware,
+	)
+	mux.Handle("/", hardened)
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,
 		Handler:           mux,
@@ -209,4 +239,24 @@ func (a automationAdapter) PullRequestMerged(event httpapi.MergeEvent) {
 		SourceBranch: event.SourceBranch,
 		TargetBranch: event.TargetBranch,
 	})
+}
+
+
+// backupAdapter converts storage objects into the API's backup shape.
+type backupAdapter struct{ manager *backup.Manager }
+
+func (b backupAdapter) Backup(ctx context.Context, owner, name string) (string, error) {
+	return b.manager.Backup(ctx, owner, name)
+}
+
+func (b backupAdapter) List(ctx context.Context, owner, name string) ([]httpapi.BackupObject, error) {
+	objects, err := b.manager.List(ctx, owner, name)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]httpapi.BackupObject, len(objects))
+	for i, object := range objects {
+		out[i] = httpapi.BackupObject{Key: object.Key, Size: object.Size, Modified: object.Modified}
+	}
+	return out, nil
 }

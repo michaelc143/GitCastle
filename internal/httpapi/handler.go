@@ -37,6 +37,9 @@ type Handler struct {
 	Jobs         JobStore
 	Secrets      SecretManager
 	Pushes       PushNotifier
+	Audit        Auditor
+	Profiles     ProfileManager
+	Backups      BackupManager
 	InternalToken string
 	Logger       *slog.Logger
 }
@@ -51,6 +54,9 @@ type Options struct {
 	Jobs       JobStore       // nil disables job listing routes
 	Secrets    SecretManager  // nil disables secret management routes
 	Pushes     PushNotifier   // nil disables push notification intake
+	Audit      Auditor        // nil disables audit recording and the query API
+	Profiles   ProfileManager // nil disables profile endpoints
+	Backups    BackupManager  // nil disables backup endpoints
 	InternalToken string      // shared secret for post-receive hooks
 }
 
@@ -74,6 +80,9 @@ func NewHandler(repositoryService RepositoryService, authenticator Authenticator
 		Jobs:         opts.Jobs,
 		Secrets:      opts.Secrets,
 		Pushes:       opts.Pushes,
+		Audit:        opts.Audit,
+		Profiles:     opts.Profiles,
+		Backups:      opts.Backups,
 		InternalToken: opts.InternalToken,
 		Logger:       logger,
 	}
@@ -93,6 +102,7 @@ func NewHandler(repositoryService RepositoryService, authenticator Authenticator
 	if h.Webhooks != nil {
 		h.registerAutomationRoutes(mux)
 	}
+	h.registerHardeningRoutes(mux)
 	return loggingMiddleware(mux, logger)
 }
 
@@ -122,6 +132,10 @@ func (h Handler) createRepository(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		h.writeError(w, err)
 		return
+	}
+	if h.Audit != nil {
+		_ = h.Audit.Record(r.Context(), user.Username, "repository_created",
+			repository.Owner+"/"+repository.Name, nil, remoteIP(r))
 	}
 	// The creator becomes the repository admin.
 	if h.Permissions != nil {
