@@ -2,7 +2,9 @@ import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 
 // API target is configurable so dev/preview can point at any backend.
-const apiTarget = process.env.GITCASTLE_API ?? 'http://localhost:8080'
+const apiTarget: string =
+  (globalThis as { process?: { env?: Record<string, string> } }).process?.env?.GITCASTLE_API ??
+  'http://localhost:8080'
 
 export default defineConfig({
   plugins: [react()],
