@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useState } from 'react'
 import { createRepository, listRepositories, Repository, User } from './api'
+import { Icon } from './components/Icon'
 import { navigate } from './router'
 
 type Props = {
@@ -110,12 +111,12 @@ export default function HomePage({ user, onRequireLogin }: Props) {
                 key={repository.id}
                 href={`#/${repository.owner}/${repository.name}`}
               >
-                <div className="repo-icon" aria-hidden="true">R</div>
+                <span className="repo-icon" aria-hidden="true"><Icon name="folder" size={18} /></span>
                 <div>
                   <p className="repo-owner">{repository.owner}</p>
                   <h3>{repository.name}</h3>
                 </div>
-                <span className="row-arrow" aria-hidden="true">↗</span>
+                <Icon name="code" size={15} className="row-arrow" />
               </a>
             ))}
           </div>

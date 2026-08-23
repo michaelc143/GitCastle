@@ -29,7 +29,7 @@ describe('App', () => {
     expect(await screen.findByText(/No repositories yet/)).toBeInTheDocument()
 
     // Anonymous visitors are invited to sign in from the top bar.
-    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+    fireEvent.click(screen.getAllByRole('link', { name: 'Sign in' })[0])
     await waitFor(() => expect(window.location.hash).toBe('#/login'))
   })
 
@@ -44,15 +44,16 @@ describe('App', () => {
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('database unavailable'))
   })
 
-  it('greets a signed-in user and offers sign out', async () => {
+  it('shows the signed-in user with a working sign out', async () => {
     mockSession({ id: 1, username: 'alice', created_at: new Date().toISOString() })
     mockRepositories([
       { id: 1, owner: 'alice', name: 'castle', path: '/repos/alice/castle.git', created_at: new Date().toISOString() },
     ])
 
     render(<App />)
-    expect(await screen.findByText(/Welcome back, alice/)).toBeInTheDocument()
-    expect(await screen.findByText('castle')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument()
+    expect(await screen.findByText('alice')).toBeInTheDocument()      // user menu name
+    expect(await screen.findByText('castle')).toBeInTheDocument()     // repo card
+    fireEvent.click(screen.getByRole('button', { name: /sign out/i }))
+    await waitFor(() => expect(window.location.hash).toBe('#/'))
   })
 })
