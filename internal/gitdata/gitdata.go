@@ -47,7 +47,7 @@ func (r Repo) ListRefs(ctx context.Context) ([]Ref, string, error) {
 		headBranch = strings.TrimSpace(head)
 	}
 
-	var refs []Ref
+	refs := []Ref{} // never nil: JSON must serialize as [], not null
 	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
 		if line == "" {
 			continue
@@ -87,7 +87,7 @@ func (r Repo) ListTree(ctx context.Context, rev, dir string) ([]TreeEntry, error
 		}
 		return nil, err
 	}
-	var entries []TreeEntry
+	entries := []TreeEntry{}
 	for _, record := range strings.Split(output, "\x00") {
 		if record == "" {
 			continue

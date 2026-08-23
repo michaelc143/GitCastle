@@ -30,7 +30,9 @@ function useRepoRefs(owner: string, name: string): RevState | null {
   useEffect(() => {
     let cancelled = false
     listRefs(owner, name)
-      .then(({ refs, head }) => { if (!cancelled) setState({ rev: head || 'HEAD', refs, head }) })
+      .then(({ refs, head }) => {
+        if (!cancelled) setState({ rev: head || 'HEAD', refs: refs ?? [], head })
+      })
       .catch(() => { if (!cancelled) setState({ rev: 'HEAD', refs: [], head: 'HEAD' }) })
     return () => { cancelled = true }
   }, [owner, name])
@@ -45,6 +47,7 @@ export function CodeBrowser({ owner, name, rev, filePath }: Props & { rev: strin
   const [entries, setEntries] = useState<TreeEntry[] | null>(null)
   const [blob, setBlob] = useState<BlobResponse | null>(null)
   const [error, setError] = useState('')
+  const [emptyRepo, setEmptyRepo] = useState(false)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -52,6 +55,7 @@ export function CodeBrowser({ owner, name, rev, filePath }: Props & { rev: strin
     setEntries(null)
     setBlob(null)
     setError('')
+    setEmptyRepo(false)
     setLoading(true)
 
     // Direct blob navigation: the router path after the rev is the file path.
@@ -63,7 +67,14 @@ export function CodeBrowser({ owner, name, rev, filePath }: Props & { rev: strin
     } else {
       listTree(owner, name, activeRev)
         .then((list) => { if (!cancelled) setEntries(list) })
-        .catch((reason) => { if (!cancelled) setError(reason.message) })
+        .catch((reason) => {
+          if (!cancelled) {
+            // A brand-new repository has no commits: rev resolution fails
+            // with 404. That is not an error for the user; show guidance.
+            setEmptyRepo(isNotFoundMessage(reason))
+            setError('')
+          }
+        })
         .finally(() => { if (!cancelled) setLoading(false) })
     }
     return () => { cancelled = true }
@@ -75,9 +86,17 @@ export function CodeBrowser({ owner, name, rev, filePath }: Props & { rev: strin
       <Breadcrumbs owner={owner} name={name} rev={activeRev} filePath={filePath} />
 
       {loading && <LoadingRows rows={6} />}
-      {!loading && error && <p className="error" role="alert">{error}</p>}
+      {!loading && emptyRepo && (
+        <div className="empty-repo-panel">
+          <h3>This repository is empty</h3>
+          <p>Push your first commit to see it here:</p>
+          <pre className="clone-cmd">{`git remote add origin ${cloneURL(owner, name)}\ngit push -u origin main`}</pre>
+        </div>
+      )}
 
-      {!loading && !error && entries !== null && (
+      {!loading && !emptyRepo && error && <p className="error" role="alert">{error}</p>}
+
+      {!loading && !error && !emptyRepo && entries !== null && (
         <div className="tree-panel">
           <table className="tree-table">
             <tbody>
@@ -110,6 +129,14 @@ export function CodeBrowser({ owner, name, rev, filePath }: Props & { rev: strin
       )}
     </div>
   )
+}
+
+function isNotFoundMessage(reason: unknown): boolean {
+  return reason instanceof Error && /not found/i.test(reason.message)
+}
+
+function cloneURL(owner: string, name: string): string {
+  return `${window.location.origin}/git/${owner}/${name}.git`
 }
 
 function sortEntries(a: TreeEntry, b: TreeEntry): number {
@@ -258,8 +285,9 @@ function diffStats(lines: string[]): DiffStats {
 
 function RefBar({ owner, name, state, activeRev }: Props & { state: RevState | null; activeRev: string }) {
   if (!state) return null
-  const branches = state.refs.filter((ref) => !ref.is_tag)
-  const tags = state.refs.filter((ref) => ref.is_tag)
+  const allRefs = state.refs ?? []
+  const branches = allRefs.filter((ref) => !ref.is_tag)
+  const tags = allRefs.filter((ref) => ref.is_tag)
   return (
     <nav className="ref-bar" aria-label="Branches and tags">
       {branches.length + tags.length === 0 ? (

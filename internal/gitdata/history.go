@@ -35,7 +35,7 @@ type Commit struct {
 const commitFormat = "%H%x00%an%x00%ae%x00%aI%x00%P%x00%B%x1e"
 
 func parseCommits(output string) []Commit {
-	var commits []Commit
+	commits := []Commit{}
 	for _, record := range strings.Split(output, "\x1e") {
 		record = strings.TrimLeft(record, "\n")
 		if strings.TrimSpace(record) == "" {
