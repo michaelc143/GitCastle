@@ -4,13 +4,12 @@ GitCastle is a Git hosting platform built from scratch.
 
 ## Current milestone
 
-Phase 3 (collaboration) is complete on top of Phases 1–2: auto-numbered
-issues with comment threads, pull requests with source/target branches,
-per-reviewer verdicts that can be replaced until merge, branch protection
-rules with an approval-count merge gate, and full web UI pages for all of
-it. The `collab` package stores everything in PostgreSQL; integration
-tests cover issue lifecycles, comment isolation between subjects, PR
-state immutability, and merge-gate evaluation.
+All five phases are complete. Phase 5 (production hardening) adds security
+headers, request-ID correlation, panic recovery, structured access logs,
+per-IP rate limiting, an append-only audit trail enforced at the database
+level, git-bundle backups to object storage with integrity verification,
+push-time secret scanning, and user profiles — plus Terraform for the cloud
+infra (`deploy/terraform`).
 
 ### Requirements
 
@@ -98,4 +97,4 @@ The integration test uses the local PostgreSQL container and is skipped by the d
 5. ✅ Web interface: login page, repo list, file browser, commit history, diff viewer
 6. ✅ Collaboration: issues, pull requests, comments, reviews, branch protection
 7. Automation: webhooks, build jobs, isolated Docker runners, deployment secrets
-8. Production hardening: HTTPS, rate limiting, audit logs, backups, object storage, scanning
+8. ✅ Production hardening: security headers, rate limiting, audit log, backups + object storage, secret scanning, Terraform IaC

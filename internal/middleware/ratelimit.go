@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"net"
 	"net/http"
 	"sync"
 	"time"
@@ -96,7 +97,9 @@ func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 }
 
 // clientKey identifies the caller: X-Forwarded-For's first hop when present
-// (set by the reverse proxy terminating TLS), otherwise RemoteAddr.
+// (set by the reverse proxy terminating TLS), otherwise the host part of
+// RemoteAddr. The port is stripped — ephemeral ports would otherwise give
+// every connection its own bucket.
 func clientKey(r *http.Request) string {
 	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
 		for i := 0; i < len(forwarded); i++ {
@@ -106,7 +109,11 @@ func clientKey(r *http.Request) string {
 		}
 		return trimSpace(forwarded)
 	}
-	return r.RemoteAddr
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr // no port; use as-is
+	}
+	return host
 }
 
 func trimSpace(value string) string {

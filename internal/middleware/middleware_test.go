@@ -132,8 +132,12 @@ func TestRateLimiterConcurrentAccess(t *testing.T) {
 func TestClientKeyPrefersForwardedFor(t *testing.T) {
 	request := httptest.NewRequest(http.MethodGet, "/", nil)
 	request.RemoteAddr = "10.0.0.1:9999"
-	if got := clientKey(request); got != "10.0.0.1:9999" {
-		t.Fatalf("fallback key = %q", got)
+	if got := clientKey(request); got != "10.0.0.1" {
+		t.Fatalf("host key = %q, want port stripped", got)
+	}
+	request.RemoteAddr = "no-port-value" // malformed; used verbatim
+	if got := clientKey(request); got != "no-port-value" {
+		t.Fatalf("malformed addr key = %q", got)
 	}
 	request.Header.Set("X-Forwarded-For", "203.0.113.7, 10.0.0.2")
 	if got := clientKey(request); got != "203.0.113.7" {
